@@ -16,8 +16,8 @@ Este projeto foi desenvolvido como parte de um processo seletivo, com o objetivo
 - ✅ Sistema de colisões;
 - ✅ Desenvolvido com Python e biblioteca [Pygame Zero](https://pygame-zero.readthedocs.io/en/stable/index.html).
 
-```## 📁 Estrutura do Projeto
-
+## 📁 Estrutura do Projeto
+```
 📂 Kodland_Project/
 ├── python/ # Pasta principal
 │ ├── images/ # Imagens e sprites do jogo
