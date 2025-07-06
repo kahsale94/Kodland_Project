@@ -3,30 +3,27 @@ import random
 import math
 from pygame import Rect
 
-# --- CONFIGURAÇÕES INICIAIS ---
 
 TITLE = "Ninja vs Zombies"
 WIDTH = 800
 HEIGHT = 480
 LEVEL_WIDTH = 2400
 
-# --- ESTADOS DO JOGO ---
 
 game_state = "menu"
 camera_x = 0
 sound_on = True
 hero = None
 
-# --- ATIVOS DO MENU ---
 
 menu_buttons = {
-    "start": Rect((WIDTH//2 - 75, 150, 150, 40)),
-    "toggle_sound": Rect((WIDTH//2 - 75, 210, 150, 40)),
-    "quit": Rect((WIDTH//2 - 75, 270, 150, 40))
+    "start": Rect((WIDTH//2 - 105, 240, 200, 71)),
+    "toggle_sound": Rect((WIDTH//2 - 155, 320, 199, 71)),
+    "quit": Rect((WIDTH//2 - 80, 400, 152, 71)),
+    "menu": Rect((WIDTH//2 - 90, 310, 200, 83))
 }
 
-
-# --- FUNÇÕES PADRÃO ---
+victory_button_rect = Rect((0, 0), (0, 0))
 
 def draw():
     if game_state == "menu":
@@ -35,6 +32,8 @@ def draw():
         draw_game()
     elif game_state == "game_over":
         draw_game_over()
+    elif game_state == "victory":
+        draw_victory()
 
 def update():
     if game_state == "playing":
@@ -60,6 +59,12 @@ def on_mouse_down(pos):
             game_state = "menu"
             stop_music()
 
+    if game_state == "victory":
+        if victory_button_rect.collidepoint(pos):
+            game_state = "menu"
+            stop_music()
+
+
 def on_key_down(key):
     if game_state == "playing":
         if key == keys.SPACE:
@@ -68,7 +73,7 @@ def on_key_down(key):
             hero.attack()
     elif game_state == "game_over":
         if key == keys.R:
-            start_game()
+            start_game()     
 
 def play_sound(name):
     if sound_on:
@@ -81,26 +86,15 @@ def play_music(name):
 def stop_music():
     music.stop()
 
-
-# --- FUNÇÕES DO MENU ---
-
 def draw_menu():
     screen.clear()
-    screen.fill((30, 30, 30))
-    screen.draw.text("Ninja vs Zombies", center=(WIDTH//2, 80), fontsize=48, color="white")
+    screen.blit("background", (0, 0))
     
-    screen.draw.filled_rect(menu_buttons["start"], "darkgreen")
-    screen.draw.text("Start Game", center=menu_buttons["start"].center, color="white")
-    
-    screen.draw.filled_rect(menu_buttons["toggle_sound"], "navy")
-    sound_text = "Sound: ON" if sound_on else "Sound: OFF"
-    screen.draw.text(sound_text, center=menu_buttons["toggle_sound"].center, color="white")
-    
-    screen.draw.filled_rect(menu_buttons["quit"], "darkred")
-    screen.draw.text("Quit", center=menu_buttons["quit"].center, color="white")
-
-
-# --- FUNÇÕES DO JOGO ---
+    screen.blit("logo", (menu_buttons["start"].left - 20, menu_buttons["start"].top - 225))
+    screen.blit("play", (menu_buttons["start"].left, menu_buttons["start"].top))
+    screen.blit("exit", (menu_buttons["quit"].left, menu_buttons["quit"].top))
+    screen.blit("sound", (menu_buttons["toggle_sound"].left, menu_buttons["toggle_sound"].top))
+    screen.blit("on" if sound_on else "off", (menu_buttons["toggle_sound"].right + 10, menu_buttons["toggle_sound"].top))
 
 def start_game():
     global game_state, hero
@@ -118,7 +112,7 @@ def draw_game():
 
 
     for ground in ground_blocks:
-        ground.draw()  # normalmente chão e plataforma não precisam de câmera
+        ground.draw()
 
     for plat in platform_blocks:
         original_x = plat.x
@@ -126,17 +120,16 @@ def draw_game():
         plat.draw()
         plat.x = original_x
 
-    # Ajustar posição do herói para câmera
     original_x = hero.actor.x
     hero.actor.x = hero.actor.x - camera_x
     hero.actor.draw()
-    hero.actor.x = original_x  # restaurar posição
+    hero.actor.x = original_x
 
     for enemy in enemies:
         original_x = enemy.actor.x
         enemy.actor.x = enemy.actor.x - camera_x
         enemy.actor.draw()
-        enemy.actor.x = original_x
+        enemy.actor.x = original_x 
 
 def update_game():
     if not hero.is_attacking:
@@ -147,11 +140,10 @@ def update_game():
             hero.move("right")
             hero.direction = "right"
         else:
-            hero.vx = 0  # parado
+            hero.vx = 0
 
     hero.update()
 
-# Centraliza o herói no meio da tela, mas com limites nas bordas do mapa
     global camera_x
     camera_x = max(0, min(hero.actor.centerx - WIDTH // 2, LEVEL_WIDTH - WIDTH))
 
@@ -169,19 +161,20 @@ def update_game():
     for enemy in enemies:
         enemy.update()
         if enemy.alive and enemy.collide_with_hero(hero):
-            # Aqui você pode implementar uma lógica de game over
             global game_state
             game_state = "game_over"
-            stop_music()  # Para a música
+            stop_music()
             play_sound("death") 
 
-    # Vamos atualizar a lógica do jogo aqui
+    if all(not enemy.alive for enemy in enemies):
+        game_state = "victory"
+        stop_music()
+
     pass
 
 def draw_game_over():
-    draw_game()  # Desenha o jogo normalmente como estava
+    draw_game()
 
-    # Sobrepõe o texto "Game Over"
     screen.draw.text("Game Over", center=(WIDTH//2, HEIGHT//2 - 50), fontsize=60, color="red", owidth=1.0, ocolor="black")
     screen.draw.text("Pressione R para recomecar", center=(WIDTH//2, HEIGHT//2 + 20), fontsize=40, color="white", owidth=1.0, ocolor="black")
 
@@ -189,34 +182,39 @@ def draw_game_over():
     screen.draw.filled_rect(menu_button, "gray")
     screen.draw.text("Menu", center=menu_button.center, fontsize=40, color="black")
 
-    # Salvar posição do botão para detecção de clique
     global menu_button_rect
     menu_button_rect = menu_button
 
+def draw_victory():
+    draw_game()
 
-# --- CENARIO ---
+    screen.draw.text("Voce Venceu!", center=(WIDTH//2, HEIGHT//2 - 50), fontsize=60, color="green", owidth=1.0, ocolor="black")
+    screen.draw.text("Clique para voltar ao Menu", center=(WIDTH//2, HEIGHT//2 + 20), fontsize=40, color="white", owidth=1.0, ocolor="black")
+
+    victory_button = Rect((WIDTH // 2 - 100, HEIGHT // 2 + 60, 200, 83))
+    screen.blit("menu", (menu_buttons["menu"].left, menu_buttons["menu"].top))
+
+    global victory_button_rect
+    victory_button_rect = victory_button
+
 
 background = Actor("background", topleft=(0, 0))
 
-ground_blocks = []  # blocos do chão
-platform_blocks = []  # plataformas suspensas
+ground_blocks = []
+platform_blocks = []
 
-TILE_WIDTH = 64  # largura dos blocos
+TILE_WIDTH = 64
 TILE_HEIGHT = 64
 
 def setup_level():
     global enemies
 
-    """Cria o chão e plataformas para o herói andar/pular"""
     ground_y = HEIGHT - TILE_HEIGHT
 
-    # Chão cobrindo toda a largura da tela
     for x in range(0, LEVEL_WIDTH, TILE_WIDTH):
         ground = Actor("ground", topleft=(x, ground_y))
         ground_blocks.append(ground)
 
-    # Adiciona algumas plataformas suspensas
-    # (posição X, posição Y)
     platform_positions = [
         (200, 340),
         (400, 250),
@@ -230,10 +228,8 @@ def setup_level():
         (2300, 350) 
     ]
 
-    # Limpa a lista global antes de preencher
     platform_blocks.clear()
 
-    # Cria atores das plataformas e adiciona na lista global
     for pos in platform_positions:
         plat = Actor("platform", topleft=pos)
         platform_blocks.append(plat)
@@ -245,17 +241,16 @@ def setup_level():
         ZombieFourLegs(1100, HEIGHT - TILE_HEIGHT - 31, 1050, 2400)
     ]
 
-# --- PERSONAGENS ---
 
 class Hero:
     def __init__(self, x, y):
-        self.vx = 0  # velocidade horizontal
-        self.vy = 0  # velocidade vertical
+        self.vx = 0
+        self.vy = 0
         self.is_jumping = False
         self.on_ground = False
         self.is_attacking = False
-        self.direction = "right"  # direção atual para virar o sprite
-        self.actor = Actor("samurai_idle_right_1", (x, y))  # sprite parado
+        self.direction = "right"
+        self.actor = Actor("samurai_idle_right_1", (x, y))
 
         self.idle_frames = {
             "right" : [f"samurai_idle_right_{i}" for i in range(1, 6)],
@@ -294,13 +289,11 @@ class Hero:
         else:
             self.state = 'idle'
 
-        # impedir sair da tela
         if self.actor.left < 0:
             self.actor.left = 0
         elif self.actor.right > LEVEL_WIDTH:
             self.actor.right = LEVEL_WIDTH
        
-        # colisão com chão
         for ground in ground_blocks:
             if self.vy > 0 and self.collide_with(ground):
                 self.actor.bottom = ground.top
@@ -308,17 +301,14 @@ class Hero:
                 self.on_ground = True
                 break
 
-        # colisão com plataformas
         for plat in platform_blocks:
             if self.vy > 0 and self.collide_with(plat):
-                # Verifica se o herói está caindo e acima da plataforma
                 if self.actor.bottom <= plat.top + 10:
                     self.actor.bottom = plat.top
                     self.vy = 0
                     self.on_ground = True
                     break
 
-        # Animacao de ataque
         if self.is_attacking:
             self.attack_timer += 1
             if self.attack_timer >= 5:
@@ -329,12 +319,10 @@ class Hero:
                     self.attack_frame_index = 0
                 else:
                     self.actor.image = self.attack_frames[self.direction][self.attack_frame_index]
-            return  # Impede que outras animações rodem enquanto ataca
-
-        # Animacao de andar e correr
+            return
 
         if self.state == "idle":
-            self.idle_timer += 1 / 60  # considerando 60 FPS
+            self.idle_timer += 1 / 60
             if self.idle_timer >= self.idle_speed:
                 self.idle_timer = 0
                 self.frame_index = (self.frame_index + 1) % len(self.idle_frames[self.direction])
@@ -423,8 +411,8 @@ class Enemy:
                         if self.death_bottom_y is not None:
                             self.actor.bottom = self.death_bottom_y
                     else:
-                        self.is_dying = False  # termina animação
-                        self.death_frame_index = len(frames) - 1  # mantém o último frame visível
+                        self.is_dying = False
+                        self.death_frame_index = len(frames) - 1
 
             return
 
@@ -446,7 +434,6 @@ class Enemy:
             self.actor.image = frames[self.current_frame]
 
 
-
     def collide_with_hero(self, hero):
         dx = abs(self.actor.x - hero.actor.x)
         dy = abs(self.actor.y - hero.actor.y)
@@ -460,9 +447,9 @@ class Enemy:
         self.death_frame_index = 0
         self.death_timer = 0
 
-        self.death_bottom_y = self.actor.bottom  # SALVA posição exata do chão
+        self.death_bottom_y = self.actor.bottom
         self.actor.image = self.death_frames[self.direction][0]
-        self.actor.bottom = self.death_bottom_y  # Garante que já comece certo
+        self.actor.bottom = self.death_bottom_y
 
 
 class ZombieWoman(Enemy):
@@ -502,7 +489,6 @@ class ZombieWoman(Enemy):
                 self.vx = -1
                 self.direction = "left"
         else:
-            # Patrulha padrão do Enemy
             if self.actor.x <= self.territory_start:
                 self.vx = 1
                 self.direction = "right"
@@ -540,12 +526,3 @@ class ZombieFourLegs(Enemy):
 
 
 pgzrun.go()
-
-
-
-# ------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# COISAS A FAZER DEPOIS DO JOGO PRONTO
-
-# AJUSTAR BOTOES DO MENU
-# CORRIGIR ORGANIZACAO DAS PASTAS E DO CODIGO
