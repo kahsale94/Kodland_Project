@@ -42,6 +42,7 @@ def update():
 
 def on_mouse_down(pos):
     global game_state, sound_on
+    
     if game_state == "menu":
         if menu_buttons["start"].collidepoint(pos):
             start_game()
@@ -53,6 +54,21 @@ def on_mouse_down(pos):
                 music.stop()
         elif menu_buttons["quit"].collidepoint(pos):
             quit()
+
+    if game_state == "game_over":
+        if menu_button_rect.collidepoint(pos):
+            game_state = "menu"
+            stop_music()
+
+def on_key_down(key):
+    if game_state == "playing":
+        if key == keys.SPACE:
+            hero.jump()
+        if key == keys.K:
+            hero.attack()
+    elif game_state == "game_over":
+        if key == keys.R:
+            start_game()
 
 def play_sound(name):
     if sound_on:
@@ -93,18 +109,13 @@ def start_game():
     platform_blocks.clear()
     setup_level()
     hero = Hero(100, HEIGHT)
-    enemies = [
-        Enemy(300, HEIGHT - TILE_HEIGHT - 31, 250, 400),
-        Enemy(550, HEIGHT - TILE_HEIGHT - 31, 500, 650)
-    ]
     play_music("background_music")
 
-
-    # Aqui vamos inicializar o herói, inimigos, mapa, etc.
 
 def draw_game():
     screen.clear()
     screen.blit("background", (0, 0))
+
 
     for ground in ground_blocks:
         ground.draw()  # normalmente chão e plataforma não precisam de câmera
@@ -115,30 +126,33 @@ def draw_game():
         plat.draw()
         plat.x = original_x
 
-
     # Ajustar posição do herói para câmera
     original_x = hero.actor.x
     hero.actor.x = hero.actor.x - camera_x
-    hero.actor.flip_x = (hero.direction == "left")
     hero.actor.draw()
     hero.actor.x = original_x  # restaurar posição
 
     for enemy in enemies:
         original_x = enemy.actor.x
         enemy.actor.x = enemy.actor.x - camera_x
-        enemy.actor.flip_x = (enemy.direction == "left")
         enemy.actor.draw()
         enemy.actor.x = original_x
 
-
-    # Vamos desenhar a fase, herói, inimigos, etc.
+    screen.draw.text(f"Hero Direction: {hero.direction}", (10, 10), color="white")
+    screen.draw.text(f"Hero Flip: {hero.actor.flip_x}", (10, 30), color="white")
+    
+    for i, enemy in enumerate(enemies):
+        screen.draw.text(f"Enemy {i} Dir: {enemy.direction}", (10, 60 + i*20), color="white")
+        screen.draw.text(f"Enemy {i} Flip: {enemy.actor.flip_x}", (10, 80 + i*20), color="white")
 
 def update_game():
     if not hero.is_attacking:
         if keyboard.a or keyboard.left:
             hero.move("left")
+            hero.direction = "left"
         elif keyboard.d or keyboard.right:
             hero.move("right")
+            hero.direction = "right"
         else:
             hero.vx = 0  # parado
 
@@ -166,20 +180,26 @@ def update_game():
             # Aqui você pode implementar uma lógica de game over
             global game_state
             game_state = "game_over"
+            stop_music()  # Para a música
+            play_sound("death") 
 
     # Vamos atualizar a lógica do jogo aqui
     pass
 
 def draw_game_over():
-    screen.clear()
-    screen.draw.text("Game Over", center=(WIDTH//2, HEIGHT//2), fontsize=60, color="white")
+    draw_game()  # Desenha o jogo normalmente como estava
 
-def on_key_down(key):
-    if game_state == "playing":
-        if key == keys.SPACE:
-            hero.jump()
-        if key == keys.K:
-            hero.attack()
+    # Sobrepõe o texto "Game Over"
+    screen.draw.text("Game Over", center=(WIDTH//2, HEIGHT//2 - 50), fontsize=60, color="red", owidth=1.0, ocolor="black")
+    screen.draw.text("Pressione R para recomecar", center=(WIDTH//2, HEIGHT//2 + 20), fontsize=40, color="white", owidth=1.0, ocolor="black")
+
+    menu_button = Rect((WIDTH // 2 - 100, HEIGHT // 2 + 60), (200, 50))
+    screen.draw.filled_rect(menu_button, "gray")
+    screen.draw.text("Menu", center=menu_button.center, fontsize=40, color="black")
+
+    # Salvar posição do botão para detecção de clique
+    global menu_button_rect
+    menu_button_rect = menu_button
 
 
 # --- CENARIO ---
@@ -227,10 +247,10 @@ def setup_level():
         platform_blocks.append(plat)
 
     enemies = [
-        ZombieWoman(300, HEIGHT - TILE_HEIGHT - 31, 250, 400),
-        Enemy(550, HEIGHT - TILE_HEIGHT - 31, 500, 650),
-        ZombieWoman(800, HEIGHT - TILE_HEIGHT - 31, 750, 900),
-        ZombieFourLegs(1100, HEIGHT - TILE_HEIGHT - 31, 1050, 1250)
+        ZombieWoman(300, HEIGHT - TILE_HEIGHT - 31, 200, 800),
+        Enemy(550, HEIGHT - TILE_HEIGHT - 31, 400, 1000),
+        ZombieWoman(800, HEIGHT - TILE_HEIGHT - 31, 750, 1500),
+        ZombieFourLegs(1100, HEIGHT - TILE_HEIGHT - 31, 1050, 2400)
     ] 
 
 # --- PERSONAGENS ---
@@ -241,9 +261,9 @@ class Hero:
         self.vy = 0  # velocidade vertical
         self.is_jumping = False
         self.on_ground = False
+        self.is_attacking = False
         self.direction = "right"  # direção atual para virar o sprite
         self.actor = Actor("samurai_idle_1", (x, y))  # sprite parado
-        self.is_attacking = False
 
         self.idle_frames = [f"samurai_idle_{i}" for i in range(1, 6)]
         self.run_frames = [f"samurai_run_{i}" for i in range(1, 8)]
@@ -318,13 +338,15 @@ class Hero:
                 self.idle_timer = 0
                 self.frame_index = (self.frame_index + 1) % len(self.idle_frames)
                 self.actor.image = self.idle_frames[self.frame_index]
-
+                self.actor.flip_x = (self.direction == "left")
+                print(f"Hero idle: image={self.actor.image}, direction={self.direction}, flip_x={self.actor.flip_x}")
         elif self.state == "running":
             self.run_timer += 1 / 60
             if self.run_timer >= self.run_speed:
                 self.run_timer = 0
                 self.frame_index = (self.frame_index + 1) % len(self.run_frames)
                 self.actor.image = self.run_frames[self.frame_index]
+                self.actor.flip_x = (self.direction == "left")
 
 
     def move(self, direction):
@@ -393,6 +415,7 @@ class Enemy:
                     self.death_frame_index += 1
                     if self.death_frame_index < len(self.death_frames):
                         self.actor.image = self.death_frames[self.death_frame_index]
+                        self.actor.flip_x = (self.direction == "left")
                         if self.death_bottom_y is not None:
                             self.actor.bottom = self.death_bottom_y
                     else:
@@ -400,11 +423,14 @@ class Enemy:
                         self.is_dying = False
             return
 
-        # movimento horizontal
+        if self.actor.x <= self.territory_start:
+            self.vx = abs(self.vx)
+            self.direction = "right"
+        elif self.actor.x >= self.territory_end:
+            self.vx = -abs(self.vx)
+            self.direction = "left"
+
         self.actor.x += self.vx
-        if self.actor.left < 0 or self.actor.right > LEVEL_WIDTH:
-            self.vx = -self.vx
-            self.direction = "left" if self.vx < 0 else "right"
 
         # animação
         self.frame_timer += 1
@@ -413,6 +439,7 @@ class Enemy:
             frames = self.run_frames if self.vx != 0 else self.idle_frames
             self.current_frame = (self.current_frame + 1) % len(frames)
             self.actor.image = frames[self.current_frame]
+            self.actor.flip_x = (self.direction == "left")
 
 
     def collide_with_hero(self, hero):
@@ -432,6 +459,7 @@ class Enemy:
 
         self.death_bottom_y = self.actor.bottom  # SALVA posição exata do chão
         self.actor.image = self.death_frames[0]
+        self.actor.flip_x = (self.direction == "left")
         self.actor.bottom = self.death_bottom_y  # Garante que já comece certo
 
 
@@ -441,6 +469,7 @@ class ZombieWoman(Enemy):
         self.run_frames = [f"zombiewoman_run_{i}" for i in range(1, 7)]
         self.death_frames = [f"zombiewoman_die_{i}" for i in range(1, 6)]
         self.actor.image = self.run_frames[0]
+        self.actor.flip_x = (self.direction == "left")
         self.detection_range = 200  # distância de "visão"
         self.following_hero = False
 
@@ -483,7 +512,8 @@ class ZombieWoman(Enemy):
             frames = self.run_frames
             self.current_frame = (self.current_frame + 1) % len(frames)
             self.actor.image = frames[self.current_frame]
-
+            if self.direction == "left":
+                self.scale_x = -1
 
 
 class ZombieFourLegs(Enemy):
@@ -493,9 +523,8 @@ class ZombieFourLegs(Enemy):
         #self.idle_frames = [f"zombiefour_idle_{i}" for i in range(1, 8)]
         self.run_frames = [f"zombiefour_run_{i}" for i in range(1, 10)]
         self.death_frames = [f"zombiefour_die_{i}" for i in range(1, 6)]
-        self.actor.image = self.idle_frames[0]
+        self.actor.image = self.run_frames[0]
         self.vx = 3  # mais rápido
-
         self.actor.bottom = y + 50
 
 
@@ -507,9 +536,6 @@ pgzrun.go()
 
 # COISAS A FAZER DEPOIS DO JOGO PRONTO
 
-# BOTAR 2 NOVOS ZOMBIS
-# DEIXAR ZOMBIS MAIS ESPERTOS
 # CORRIGIR ANIMACOES PARA ESQUERDA
 # AJUSTAR BOTOES DO MENU
-# FAZER O RESTART DO JOGO
 # CORRIGIR ORGANIZACAO DAS PASTAS E DO CODIGO
