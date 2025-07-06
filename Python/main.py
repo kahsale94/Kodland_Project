@@ -45,8 +45,23 @@ def on_mouse_down(pos):
             start_game()
         elif menu_buttons["toggle_sound"].collidepoint(pos):
             sound_on = not sound_on
+            if sound_on:
+                music.play("background_music")
+            else:
+                music.stop()
         elif menu_buttons["quit"].collidepoint(pos):
             quit()
+
+def play_sound(name):
+    if sound_on:
+        getattr(sounds, name).play()
+
+def play_music(name):
+    if sound_on:
+        music.play(name)
+
+def stop_music():
+    music.stop()
 
 
 # --- FUNÇÕES DO MENU ---
@@ -70,12 +85,19 @@ def draw_menu():
 # --- FUNÇÕES DO JOGO ---
 
 def start_game():
-    global game_state, hero
+    global game_state, hero, enemies
     game_state = "playing"
     ground_blocks.clear()
     platform_blocks.clear()
     setup_level()
     hero = Hero(100, HEIGHT)
+    enemies = [
+        Enemy(300, HEIGHT - TILE_HEIGHT - 31, 250, 400),
+        Enemy(550, HEIGHT - TILE_HEIGHT - 31, 500, 650)
+    ]
+    play_music("background_music")
+
+
     # Aqui vamos inicializar o herói, inimigos, mapa, etc.
 
 def draw_game():
@@ -89,17 +111,39 @@ def draw_game():
         plat.draw()
 
     hero.draw()
+
+    for enemy in enemies:
+        enemy.draw()
+
     # Vamos desenhar a fase, herói, inimigos, etc.
 
 def update_game():
-    if keyboard.a:
-        hero.move("left")
-    elif keyboard.d:
-        hero.move("right")
-    else:
-        hero.vx = 0  # parado
+    if not hero.is_attacking:
+        if keyboard.a or keyboard.left:
+            hero.move("left")
+        elif keyboard.d or keyboard.right:
+            hero.move("right")
+        else:
+            hero.vx = 0  # parado
 
     hero.update()
+
+    if hero.is_attacking:
+        hitbox = hero.attack_hitbox()
+        for enemy in enemies:
+            if enemy.alive:
+                enemy_rect = Rect(enemy.actor.left, enemy.actor.top, enemy.actor.width, enemy.actor.height)
+                if hitbox.colliderect(enemy_rect):
+                    enemy.alive = False
+                    play_sound("swordslash")
+
+
+    for enemy in enemies:
+        enemy.update()
+        if enemy.alive and enemy.collide_with_hero(hero):
+            # Aqui você pode implementar uma lógica de game over
+            global game_state
+            game_state = "game_over"
 
     # Vamos atualizar a lógica do jogo aqui
     pass
@@ -112,6 +156,9 @@ def on_key_down(key):
     if game_state == "playing":
         if key == keys.SPACE:
             hero.jump()
+        if key == keys.K:
+            hero.attack()
+
 
 # --- CENARIO ---
 
@@ -149,39 +196,40 @@ def setup_level():
 class Hero:
     def __init__(self, x, y):
         self.vx = 0  # velocidade horizontal
-        self.direction = "right"  # direção atual para virar o sprite
-        self.actor = Actor("warrior_idle_1", (x, y))  # sprite parado
         self.vy = 0  # velocidade vertical
         self.is_jumping = False
         self.on_ground = False
-        self.frames_idle = [
-            "warrior_idle_1",
-            "warrior_idle_2",
-            "warrior_idle_3",
-            "warrior_idle_4",
-            "warrior_idle_5",
-            "warrior_idle_6"
-        ]
-        self.frames_run = [
-            "warrior_run_1",
-            "warrior_run_2",
-            "warrior_run_3",
-            "warrior_run_4",
-            "warrior_run_5",
-            "warrior_run_6"
-        ]
-        self.current_frame = 0
-        self.frame_timer = 0
-        self.flip_manually = True
+        self.direction = "right"  # direção atual para virar o sprite
+        self.actor = Actor("samurai_idle_1", (x, y))  # sprite parado
+        self.is_attacking = False
+
+        self.idle_frames = [f"samurai_idle_{i}" for i in range(1, 6)]
+        self.run_frames = [f"samurai_run_{i}" for i in range(1, 8)]
+        self.attack_frames = [f"samurai_attack_{i}" for i in range(1, 10)]
+
+        self.attack_frame_index = 0
+        self.attack_timer = 0
+
+        self.frame_index = 0
+        self.idle_timer = 0
+        self.idle_speed = 0.3  # menor = mais lento
+
+        self.run_timer = 0
+        self.run_speed = 0.08  #  mais rápido que o idle
+
+        self.state = "idle"  # ou "run"
 
     def update(self):
         # gravidade
         self.vy += 0.5  # força da gravidade
         self.actor.y += self.vy
+        self.actor.x += self.vx
         self.on_ground = False
 
-        # movimento horizontal
-        self.actor.x += self.vx
+        if hero.vx != 0:
+            self.state = 'running'
+        else:
+            self.state = 'idle'
 
         # impedir sair da tela
         if self.actor.left < 0:
@@ -206,19 +254,36 @@ class Hero:
                     self.vy = 0
                     self.on_ground = True
                     break
-        
-        # animacao
-        self.frame_timer += 1
-        if self.frame_timer >= 6:
-            self.frame_timer = 0
 
-            if self.vx != 0:  # está se movendo
-                frames = self.frames_run
-            else:
-                frames = self.frames_idle
+        # Animacao de ataque
+        if self.is_attacking:
+            self.attack_timer += 1
+            if self.attack_timer >= 5:
+                self.attack_timer = 0
+                self.attack_frame_index += 1
+                if self.attack_frame_index >= len(self.attack_frames):
+                    self.is_attacking = False
+                    self.attack_frame_index = 0
+                else:
+                    self.actor.image = self.attack_frames[self.attack_frame_index]
+            return  # Impede que outras animações rodem enquanto ataca
 
-            self.current_frame = (self.current_frame + 1) % len(frames)
-            self.actor.image = frames[self.current_frame]
+        # Animacao de andar e correr
+
+        if self.state == "idle":
+            self.idle_timer += 1 / 60  # considerando 60 FPS
+            if self.idle_timer >= self.idle_speed:
+                self.idle_timer = 0
+                self.frame_index = (self.frame_index + 1) % len(self.idle_frames)
+                self.actor.image = self.idle_frames[self.frame_index]
+
+        elif self.state == "running":
+            self.run_timer += 1 / 60
+            if self.run_timer >= self.run_speed:
+                self.run_timer = 0
+                self.frame_index = (self.frame_index + 1) % len(self.run_frames)
+                self.actor.image = self.run_frames[self.frame_index]
+
 
     def move(self, direction):
         speed = 3
@@ -233,6 +298,23 @@ class Hero:
         if self.on_ground:
             self.vy = -10
             self.on_ground = False
+            play_sound("jump")
+
+    def attack(self):
+        if not self.is_attacking:
+            self.is_attacking = True
+            self.attack_frame_index = 0
+            self.attack_timer = 0
+            self.actor.image = self.attack_frames[0]
+            self.vx = 0
+            play_sound("swordslash")
+                    
+    def attack_hitbox(self):
+        offset = 40
+        if self.direction == "right":
+            return Rect(self.actor.right, self.actor.top, offset, self.actor.height)
+        else:
+            return Rect(self.actor.left - offset, self.actor.top, offset, self.actor.height)
 
     def collide_with(self, block):
         return self.actor.colliderect(block)
@@ -241,6 +323,54 @@ class Hero:
         self.actor.flip_x = (self.direction == "left")
         self.actor.draw()
 
+class Enemy:
+    def __init__(self, x, y, territory_start, territory_end):
+        self.actor = Actor("zombie_idle_1", (x, y))
+        self.vx = 1  # velocidade inicial
+        self.alive = True
+
+        self.territory_start = territory_start
+        self.territory_end = territory_end
+
+        self.idle_frames = [f"zombie_idle_{i}" for i in range(1, 8)]
+        self.run_frames = [f"zombie_run_{i}" for i in range(1, 8)]
+
+        self.current_frame = 0
+        self.frame_timer = 0
+        self.direction = "right"
+
+    def update(self):
+        if not self.alive:
+            return
+        # movimento horizontal
+        self.actor.x += self.vx
+
+        # inverter direção ao chegar nas bordas do território
+        if self.actor.x < self.territory_start:
+            self.vx = abs(self.vx)
+            self.direction = "right"
+        elif self.actor.x > self.territory_end:
+            self.vx = -abs(self.vx)
+            self.direction = "left"
+
+        # animação
+        self.frame_timer += 1
+        if self.frame_timer >= 10:
+            self.frame_timer = 0
+            frames = self.run_frames if self.vx != 0 else self.idle_frames
+            self.current_frame = (self.current_frame + 1) % len(frames)
+            self.actor.image = frames[self.current_frame]
+
+    def draw(self):
+        if not self.alive:
+            return
+        self.actor.flip_x = (self.direction == "left")
+        self.actor.draw()
+
+    def collide_with_hero(self, hero):
+        return self.actor.colliderect(hero.actor)
+
+
 pgzrun.go()
 
 
@@ -248,8 +378,8 @@ pgzrun.go()
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # COISAS A FAZER DEPOIS DO JOGO PRONTO
-#AJUSTAR BACKGROU
+#AJUSTAR BACKGROUD PARA PARALAX
 #AJUSTAR BOTOES
-#
+#ARRUMAR QUANTIDADE DE SPRITES DE CORRIDA
 #
 #
