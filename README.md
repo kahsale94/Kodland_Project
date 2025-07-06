@@ -25,8 +25,7 @@ Este projeto foi desenvolvido como parte de um processo seletivo, com o objetivo
 │ ├── sounds/ # Sons do jogo
 │ ├── venv_test/ # Ambiente virtual para teste
 │ └── main.py # Arquivo principal para execução
-├── README.md # Este arquivo
-└── requirements.txt # Dependências do projeto
+└── README.md # Este arquivo
 ```
 
 ## ▶️ Como Rodar o Jogo
@@ -37,7 +36,7 @@ Este projeto foi desenvolvido como parte de um processo seletivo, com o objetivo
 ```bash
 pip install pgzero
 ```
-3.Depois para rodar, use o comando:
+3. Depois para rodar, use o comando:
 
 ```bash
 pgzrun main.py
