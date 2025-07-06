@@ -16,7 +16,7 @@ Este projeto foi desenvolvido como parte de um processo seletivo, com o objetivo
 - ✅ Sistema de colisões;
 - ✅ Desenvolvido com Python e biblioteca [Pygame Zero](https://pygame-zero.readthedocs.io/en/stable/index.html).
 
-## 📁 Estrutura do Projeto
+```## 📁 Estrutura do Projeto
 
 📂 Kodland_Project/
 ├── python/ # Pasta principal
@@ -27,12 +27,12 @@ Este projeto foi desenvolvido como parte de um processo seletivo, com o objetivo
 │ └── main.py # Arquivo principal para execução
 ├── README.md # Este arquivo
 └── requirements.txt # Dependências do projeto
-
+```
 
 ## ▶️ Como Rodar o Jogo
 
 1. Certifique-se de ter o Python 3 instalado.
 2. Instale as dependências com o comando:
 
-bash
+```bash
 pip install -r requirements.txt
