@@ -8,10 +8,12 @@ from pygame import Rect
 TITLE = "Ninja vs Zombies"
 WIDTH = 800
 HEIGHT = 480
+LEVEL_WIDTH = 2400
 
 # --- ESTADOS DO JOGO ---
 
 game_state = "menu"
+camera_x = 0
 sound_on = True
 hero = None
 
@@ -85,7 +87,7 @@ def draw_menu():
 # --- FUNÇÕES DO JOGO ---
 
 def start_game():
-    global game_state, hero, enemies
+    global game_state, hero
     game_state = "playing"
     ground_blocks.clear()
     platform_blocks.clear()
@@ -105,15 +107,29 @@ def draw_game():
     screen.blit("background", (0, 0))
 
     for ground in ground_blocks:
-        ground.draw()
+        ground.draw()  # normalmente chão e plataforma não precisam de câmera
 
     for plat in platform_blocks:
+        original_x = plat.x
+        plat.x = plat.x - camera_x
         plat.draw()
+        plat.x = original_x
 
-    hero.draw()
+
+    # Ajustar posição do herói para câmera
+    original_x = hero.actor.x
+    hero.actor.x = hero.actor.x - camera_x
+    hero.actor.flip_x = (hero.direction == "left")
+    hero.actor.draw()
+    hero.actor.x = original_x  # restaurar posição
 
     for enemy in enemies:
-        enemy.draw()
+        original_x = enemy.actor.x
+        enemy.actor.x = enemy.actor.x - camera_x
+        enemy.actor.flip_x = (enemy.direction == "left")
+        enemy.actor.draw()
+        enemy.actor.x = original_x
+
 
     # Vamos desenhar a fase, herói, inimigos, etc.
 
@@ -128,14 +144,20 @@ def update_game():
 
     hero.update()
 
+    global camera_x
+
+# Centraliza o herói no meio da tela, mas com limites nas bordas do mapa
+    camera_x = max(0, min(hero.actor.centerx - WIDTH // 2, LEVEL_WIDTH - WIDTH))
+
+
     if hero.is_attacking:
         hitbox = hero.attack_hitbox()
         for enemy in enemies:
             if enemy.alive:
                 enemy_rect = Rect(enemy.actor.left, enemy.actor.top, enemy.actor.width, enemy.actor.height)
                 if hitbox.colliderect(enemy_rect):
+                    enemy.die()
                     enemy.alive = False
-                    play_sound("swordslash")
 
 
     for enemy in enemies:
@@ -171,25 +193,45 @@ TILE_WIDTH = 64  # largura dos blocos
 TILE_HEIGHT = 64
 
 def setup_level():
+    global enemies
+
     """Cria o chão e plataformas para o herói andar/pular"""
     ground_y = HEIGHT - TILE_HEIGHT
 
     # Chão cobrindo toda a largura da tela
-    for x in range(0, WIDTH, TILE_WIDTH):
+    for x in range(0, LEVEL_WIDTH, TILE_WIDTH):
         ground = Actor("ground", topleft=(x, ground_y))
         ground_blocks.append(ground)
 
     # Adiciona algumas plataformas suspensas
     # (posição X, posição Y)
-    positions = [
+    platform_positions = [
         (200, 340),
         (400, 250),
-        (600, 340)
+        (600, 340),
+        (900, 320),
+        (1200, 270),
+        (1600, 200),
+        (1800, 350),
+        (2000, 300),
+        (2200, 280),
+        (2300, 350) 
     ]
 
-    for pos in positions:
+    # Limpa a lista global antes de preencher
+    platform_blocks.clear()
+
+    # Cria atores das plataformas e adiciona na lista global
+    for pos in platform_positions:
         plat = Actor("platform", topleft=pos)
         platform_blocks.append(plat)
+
+    enemies = [
+        ZombieWoman(300, HEIGHT - TILE_HEIGHT - 31, 250, 400),
+        Enemy(550, HEIGHT - TILE_HEIGHT - 31, 500, 650),
+        ZombieWoman(800, HEIGHT - TILE_HEIGHT - 31, 750, 900),
+        ZombieFourLegs(1100, HEIGHT - TILE_HEIGHT - 31, 1050, 1250)
+    ] 
 
 # --- PERSONAGENS ---
 
@@ -221,7 +263,7 @@ class Hero:
 
     def update(self):
         # gravidade
-        self.vy += 0.5  # força da gravidade
+        self.vy += 0.3  # força da gravidade
         self.actor.y += self.vy
         self.actor.x += self.vx
         self.on_ground = False
@@ -234,12 +276,12 @@ class Hero:
         # impedir sair da tela
         if self.actor.left < 0:
             self.actor.left = 0
-        elif self.actor.right > WIDTH:
-            self.actor.right = WIDTH
+        elif self.actor.right > LEVEL_WIDTH:
+            self.actor.right = LEVEL_WIDTH
        
         # colisão com chão
         for ground in ground_blocks:
-            if self.collide_with(ground):
+            if self.vy > 0 and self.collide_with(ground):
                 self.actor.bottom = ground.top
                 self.vy = 0
                 self.on_ground = True
@@ -250,7 +292,7 @@ class Hero:
             if self.vy > 0 and self.collide_with(plat):
                 # Verifica se o herói está caindo e acima da plataforma
                 if self.actor.bottom <= plat.top + 10:
-                    self.actor.bottom = plat.top + 1
+                    self.actor.bottom = plat.top
                     self.vy = 0
                     self.on_ground = True
                     break
@@ -296,7 +338,7 @@ class Hero:
 
     def jump(self):
         if self.on_ground:
-            self.vy = -10
+            self.vy = -8
             self.on_ground = False
             play_sound("jump")
 
@@ -310,7 +352,7 @@ class Hero:
             play_sound("swordslash")
                     
     def attack_hitbox(self):
-        offset = 40
+        offset = 5
         if self.direction == "right":
             return Rect(self.actor.right, self.actor.top, offset, self.actor.height)
         else:
@@ -319,21 +361,24 @@ class Hero:
     def collide_with(self, block):
         return self.actor.colliderect(block)
 
-    def draw(self):
-        self.actor.flip_x = (self.direction == "left")
-        self.actor.draw()
-
 class Enemy:
     def __init__(self, x, y, territory_start, territory_end):
         self.actor = Actor("zombie_idle_1", (x, y))
-        self.vx = 1  # velocidade inicial
+        self.vx = 1
         self.alive = True
+        self.death_bottom_y = None
+
+        self.is_dying = False
+        self.death_frame_index = 0
+        self.death_timer = 0
+        self.death_speed = 0.12
 
         self.territory_start = territory_start
         self.territory_end = territory_end
 
         self.idle_frames = [f"zombie_idle_{i}" for i in range(1, 8)]
         self.run_frames = [f"zombie_run_{i}" for i in range(1, 8)]
+        self.death_frames = [f"zombie_die_{i}" for i in range(1, 6)]
 
         self.current_frame = 0
         self.frame_timer = 0
@@ -341,17 +386,25 @@ class Enemy:
 
     def update(self):
         if not self.alive:
+            if self.is_dying:
+                self.death_timer += 1 / 60
+                if self.death_timer >= self.death_speed:
+                    self.death_timer = 0
+                    self.death_frame_index += 1
+                    if self.death_frame_index < len(self.death_frames):
+                        self.actor.image = self.death_frames[self.death_frame_index]
+                        if self.death_bottom_y is not None:
+                            self.actor.bottom = self.death_bottom_y
+                    else:
+                        self.death_frame_index = len(self.death_frames) - 1
+                        self.is_dying = False
             return
+
         # movimento horizontal
         self.actor.x += self.vx
-
-        # inverter direção ao chegar nas bordas do território
-        if self.actor.x < self.territory_start:
-            self.vx = abs(self.vx)
-            self.direction = "right"
-        elif self.actor.x > self.territory_end:
-            self.vx = -abs(self.vx)
-            self.direction = "left"
+        if self.actor.left < 0 or self.actor.right > LEVEL_WIDTH:
+            self.vx = -self.vx
+            self.direction = "left" if self.vx < 0 else "right"
 
         # animação
         self.frame_timer += 1
@@ -361,14 +414,89 @@ class Enemy:
             self.current_frame = (self.current_frame + 1) % len(frames)
             self.actor.image = frames[self.current_frame]
 
-    def draw(self):
-        if not self.alive:
-            return
-        self.actor.flip_x = (self.direction == "left")
-        self.actor.draw()
 
     def collide_with_hero(self, hero):
-        return self.actor.colliderect(hero.actor)
+        # Distância entre os centros dos sprites
+        dx = abs(self.actor.x - hero.actor.x)
+        dy = abs(self.actor.y - hero.actor.y)
+        
+        # Define o alcance de ataque mais realista
+        return dx < 30 and dy < 40
+    
+    def die(self):
+        self.is_dying = True
+        self.vx = 0
+        self.alive = False
+        self.death_frame_index = 0
+        self.death_timer = 0
+
+        self.death_bottom_y = self.actor.bottom  # SALVA posição exata do chão
+        self.actor.image = self.death_frames[0]
+        self.actor.bottom = self.death_bottom_y  # Garante que já comece certo
+
+
+class ZombieWoman(Enemy):
+    def __init__(self, x, y, territory_start, territory_end):
+        super().__init__(x, y, territory_start, territory_end)
+        self.run_frames = [f"zombiewoman_run_{i}" for i in range(1, 7)]
+        self.death_frames = [f"zombiewoman_die_{i}" for i in range(1, 6)]
+        self.actor.image = self.run_frames[0]
+        self.detection_range = 200  # distância de "visão"
+        self.following_hero = False
+
+    def update(self):
+        if not self.alive:
+            super().update()
+            return
+
+        # Distância horizontal entre ela e o herói
+        distance_to_hero = abs(self.actor.x - hero.actor.x)
+
+        if distance_to_hero < self.detection_range:
+            self.following_hero = True
+        else:
+            self.following_hero = False
+
+        if self.following_hero:
+            if self.actor.x < hero.actor.x:
+                self.vx = 1
+                self.direction = "right"
+            else:
+                self.vx = -1
+                self.direction = "left"
+        else:
+            # Patrulha padrão do Enemy
+            if self.actor.x <= self.territory_start:
+                self.vx = 1
+                self.direction = "right"
+            elif self.actor.x >= self.territory_end:
+                self.vx = -1
+                self.direction = "left"
+
+        # Movimento
+        self.actor.x += self.vx
+
+        # Animação
+        self.frame_timer += 1
+        if self.frame_timer >= 10:
+            self.frame_timer = 0
+            frames = self.run_frames
+            self.current_frame = (self.current_frame + 1) % len(frames)
+            self.actor.image = frames[self.current_frame]
+
+
+
+class ZombieFourLegs(Enemy):
+    def __init__(self, x, y, territory_start, territory_end):
+        super().__init__(x, y, territory_start, territory_end)
+        # Sprites específicos para zumbi de quatro patas
+        #self.idle_frames = [f"zombiefour_idle_{i}" for i in range(1, 8)]
+        self.run_frames = [f"zombiefour_run_{i}" for i in range(1, 10)]
+        self.death_frames = [f"zombiefour_die_{i}" for i in range(1, 6)]
+        self.actor.image = self.idle_frames[0]
+        self.vx = 3  # mais rápido
+
+        self.actor.bottom = y + 50
 
 
 pgzrun.go()
@@ -378,8 +506,10 @@ pgzrun.go()
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # COISAS A FAZER DEPOIS DO JOGO PRONTO
-#AJUSTAR BACKGROUD PARA PARALAX
-#AJUSTAR BOTOES
-#ARRUMAR QUANTIDADE DE SPRITES DE CORRIDA
-#
-#
+
+# BOTAR 2 NOVOS ZOMBIS
+# DEIXAR ZOMBIS MAIS ESPERTOS
+# CORRIGIR ANIMACOES PARA ESQUERDA
+# AJUSTAR BOTOES DO MENU
+# FAZER O RESTART DO JOGO
+# CORRIGIR ORGANIZACAO DAS PASTAS E DO CODIGO
