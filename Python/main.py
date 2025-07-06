@@ -138,13 +138,6 @@ def draw_game():
         enemy.actor.draw()
         enemy.actor.x = original_x
 
-    screen.draw.text(f"Hero Direction: {hero.direction}", (10, 10), color="white")
-    screen.draw.text(f"Hero Flip: {hero.actor.flip_x}", (10, 30), color="white")
-    
-    for i, enemy in enumerate(enemies):
-        screen.draw.text(f"Enemy {i} Dir: {enemy.direction}", (10, 60 + i*20), color="white")
-        screen.draw.text(f"Enemy {i} Flip: {enemy.actor.flip_x}", (10, 80 + i*20), color="white")
-
 def update_game():
     if not hero.is_attacking:
         if keyboard.a or keyboard.left:
@@ -158,9 +151,8 @@ def update_game():
 
     hero.update()
 
-    global camera_x
-
 # Centraliza o herói no meio da tela, mas com limites nas bordas do mapa
+    global camera_x
     camera_x = max(0, min(hero.actor.centerx - WIDTH // 2, LEVEL_WIDTH - WIDTH))
 
 
@@ -251,7 +243,7 @@ def setup_level():
         Enemy(550, HEIGHT - TILE_HEIGHT - 31, 400, 1000),
         ZombieWoman(800, HEIGHT - TILE_HEIGHT - 31, 750, 1500),
         ZombieFourLegs(1100, HEIGHT - TILE_HEIGHT - 31, 1050, 2400)
-    ] 
+    ]
 
 # --- PERSONAGENS ---
 
@@ -263,27 +255,36 @@ class Hero:
         self.on_ground = False
         self.is_attacking = False
         self.direction = "right"  # direção atual para virar o sprite
-        self.actor = Actor("samurai_idle_1", (x, y))  # sprite parado
+        self.actor = Actor("samurai_idle_right_1", (x, y))  # sprite parado
 
-        self.idle_frames = [f"samurai_idle_{i}" for i in range(1, 6)]
-        self.run_frames = [f"samurai_run_{i}" for i in range(1, 8)]
-        self.attack_frames = [f"samurai_attack_{i}" for i in range(1, 10)]
+        self.idle_frames = {
+            "right" : [f"samurai_idle_right_{i}" for i in range(1, 6)],
+            "left" : [f"samurai_idle_left_{i}" for i in range(1, 6)]
+        }
+
+        self.run_frames = {
+            "right" : [f"samurai_run_right_{i}" for i in range(1, 8)],
+            "left" : [f"samurai_run_left_{i}" for i in range(1, 8)]
+        }
+
+        self.attack_frames = {
+            "right" : [f"samurai_attack_right_{i}" for i in range(1, 10)],
+            "left" : [f"samurai_attack_left_{i}" for i in range(1, 10)]
+        }
 
         self.attack_frame_index = 0
         self.attack_timer = 0
 
         self.frame_index = 0
         self.idle_timer = 0
-        self.idle_speed = 0.3  # menor = mais lento
+        self.idle_speed = 0.3
 
         self.run_timer = 0
-        self.run_speed = 0.08  #  mais rápido que o idle
-
-        self.state = "idle"  # ou "run"
+        self.run_speed = 0.08
+        self.state = "idle"
 
     def update(self):
-        # gravidade
-        self.vy += 0.3  # força da gravidade
+        self.vy += 0.3
         self.actor.y += self.vy
         self.actor.x += self.vx
         self.on_ground = False
@@ -323,11 +324,11 @@ class Hero:
             if self.attack_timer >= 5:
                 self.attack_timer = 0
                 self.attack_frame_index += 1
-                if self.attack_frame_index >= len(self.attack_frames):
+                if self.attack_frame_index >= len(self.attack_frames[self.direction]):
                     self.is_attacking = False
                     self.attack_frame_index = 0
                 else:
-                    self.actor.image = self.attack_frames[self.attack_frame_index]
+                    self.actor.image = self.attack_frames[self.direction][self.attack_frame_index]
             return  # Impede que outras animações rodem enquanto ataca
 
         # Animacao de andar e correr
@@ -336,17 +337,14 @@ class Hero:
             self.idle_timer += 1 / 60  # considerando 60 FPS
             if self.idle_timer >= self.idle_speed:
                 self.idle_timer = 0
-                self.frame_index = (self.frame_index + 1) % len(self.idle_frames)
-                self.actor.image = self.idle_frames[self.frame_index]
-                self.actor.flip_x = (self.direction == "left")
-                print(f"Hero idle: image={self.actor.image}, direction={self.direction}, flip_x={self.actor.flip_x}")
+                self.frame_index = (self.frame_index + 1) % len(self.idle_frames[self.direction])
+                self.actor.image = self.idle_frames[self.direction][self.frame_index]
         elif self.state == "running":
             self.run_timer += 1 / 60
             if self.run_timer >= self.run_speed:
                 self.run_timer = 0
-                self.frame_index = (self.frame_index + 1) % len(self.run_frames)
-                self.actor.image = self.run_frames[self.frame_index]
-                self.actor.flip_x = (self.direction == "left")
+                self.frame_index = (self.frame_index + 1) % len(self.run_frames[self.direction])
+                self.actor.image = self.run_frames[self.direction][self.frame_index]
 
 
     def move(self, direction):
@@ -369,12 +367,12 @@ class Hero:
             self.is_attacking = True
             self.attack_frame_index = 0
             self.attack_timer = 0
-            self.actor.image = self.attack_frames[0]
+            self.actor.image = self.attack_frames[self.direction][0]
             self.vx = 0
             play_sound("swordslash")
                     
     def attack_hitbox(self):
-        offset = 5
+        offset = 10
         if self.direction == "right":
             return Rect(self.actor.right, self.actor.top, offset, self.actor.height)
         else:
@@ -385,7 +383,7 @@ class Hero:
 
 class Enemy:
     def __init__(self, x, y, territory_start, territory_end):
-        self.actor = Actor("zombie_idle_1", (x, y))
+        self.actor = Actor("zombie_run_right_1", (x, y))
         self.vx = 1
         self.alive = True
         self.death_bottom_y = None
@@ -398,9 +396,14 @@ class Enemy:
         self.territory_start = territory_start
         self.territory_end = territory_end
 
-        self.idle_frames = [f"zombie_idle_{i}" for i in range(1, 8)]
-        self.run_frames = [f"zombie_run_{i}" for i in range(1, 8)]
-        self.death_frames = [f"zombie_die_{i}" for i in range(1, 6)]
+        self.run_frames = {
+            "right" : [f"zombie_run_right_{i}" for i in range(1, 8)],
+            "left" : [f"zombie_run_left_{i}" for i in range(1, 8)]
+        }
+        self.death_frames = {
+            "right" : [f"zombie_die_right_{i}" for i in range(1, 6)],
+            "left" : [f"zombie_die_left_{i}" for i in range(1, 6)]
+        }
 
         self.current_frame = 0
         self.frame_timer = 0
@@ -410,17 +413,19 @@ class Enemy:
         if not self.alive:
             if self.is_dying:
                 self.death_timer += 1 / 60
+                
                 if self.death_timer >= self.death_speed:
                     self.death_timer = 0
                     self.death_frame_index += 1
-                    if self.death_frame_index < len(self.death_frames):
-                        self.actor.image = self.death_frames[self.death_frame_index]
-                        self.actor.flip_x = (self.direction == "left")
+                    frames = self.death_frames[self.direction]
+                    if self.death_frame_index < len(frames):
+                        self.actor.image = frames[self.death_frame_index]
                         if self.death_bottom_y is not None:
                             self.actor.bottom = self.death_bottom_y
                     else:
-                        self.death_frame_index = len(self.death_frames) - 1
-                        self.is_dying = False
+                        self.is_dying = False  # termina animação
+                        self.death_frame_index = len(frames) - 1  # mantém o último frame visível
+
             return
 
         if self.actor.x <= self.territory_start:
@@ -432,22 +437,20 @@ class Enemy:
 
         self.actor.x += self.vx
 
-        # animação
-        self.frame_timer += 1
-        if self.frame_timer >= 10:
+        frames = self.run_frames[self.direction] if self.vx != 0 else self.idle_frames[self.direction]
+
+        self.frame_timer += 1 / 60
+        if self.frame_timer >= 0.15:
             self.frame_timer = 0
-            frames = self.run_frames if self.vx != 0 else self.idle_frames
             self.current_frame = (self.current_frame + 1) % len(frames)
             self.actor.image = frames[self.current_frame]
-            self.actor.flip_x = (self.direction == "left")
+
 
 
     def collide_with_hero(self, hero):
-        # Distância entre os centros dos sprites
         dx = abs(self.actor.x - hero.actor.x)
         dy = abs(self.actor.y - hero.actor.y)
         
-        # Define o alcance de ataque mais realista
         return dx < 30 and dy < 40
     
     def die(self):
@@ -458,19 +461,25 @@ class Enemy:
         self.death_timer = 0
 
         self.death_bottom_y = self.actor.bottom  # SALVA posição exata do chão
-        self.actor.image = self.death_frames[0]
-        self.actor.flip_x = (self.direction == "left")
+        self.actor.image = self.death_frames[self.direction][0]
         self.actor.bottom = self.death_bottom_y  # Garante que já comece certo
 
 
 class ZombieWoman(Enemy):
     def __init__(self, x, y, territory_start, territory_end):
         super().__init__(x, y, territory_start, territory_end)
-        self.run_frames = [f"zombiewoman_run_{i}" for i in range(1, 7)]
-        self.death_frames = [f"zombiewoman_die_{i}" for i in range(1, 6)]
-        self.actor.image = self.run_frames[0]
-        self.actor.flip_x = (self.direction == "left")
-        self.detection_range = 200  # distância de "visão"
+
+        self.run_frames = {
+            "right": [f"zombiewoman_run_right_{i}" for i in range(1, 7)],
+            "left": [f"zombiewoman_run_left_{i}" for i in range(1, 7)]
+        }
+        self.death_frames = {
+            "right": [f"zombiewoman_die_right_{i}" for i in range(1, 6)],
+            "left": [f"zombiewoman_die_left_{i}" for i in range(1, 6)]
+        }
+
+        self.actor.image = self.run_frames[self.direction][0]
+        self.detection_range = 200
         self.following_hero = False
 
     def update(self):
@@ -478,7 +487,6 @@ class ZombieWoman(Enemy):
             super().update()
             return
 
-        # Distância horizontal entre ela e o herói
         distance_to_hero = abs(self.actor.x - hero.actor.x)
 
         if distance_to_hero < self.detection_range:
@@ -502,30 +510,33 @@ class ZombieWoman(Enemy):
                 self.vx = -1
                 self.direction = "left"
 
-        # Movimento
         self.actor.x += self.vx
 
-        # Animação
-        self.frame_timer += 1
-        if self.frame_timer >= 10:
+        frames = self.run_frames[self.direction]
+        self.frame_timer += 1 / 60
+        if self.frame_timer >= 0.12:
             self.frame_timer = 0
-            frames = self.run_frames
             self.current_frame = (self.current_frame + 1) % len(frames)
             self.actor.image = frames[self.current_frame]
-            if self.direction == "left":
-                self.scale_x = -1
+            
 
 
 class ZombieFourLegs(Enemy):
     def __init__(self, x, y, territory_start, territory_end):
         super().__init__(x, y, territory_start, territory_end)
-        # Sprites específicos para zumbi de quatro patas
-        #self.idle_frames = [f"zombiefour_idle_{i}" for i in range(1, 8)]
-        self.run_frames = [f"zombiefour_run_{i}" for i in range(1, 10)]
-        self.death_frames = [f"zombiefour_die_{i}" for i in range(1, 6)]
-        self.actor.image = self.run_frames[0]
-        self.vx = 3  # mais rápido
-        self.actor.bottom = y + 50
+
+        self.run_frames = {
+            "right": [f"zombiefour_run_right_{i}" for i in range(1, 10)],
+            "left": [f"zombiefour_run_left_{i}" for i in range(1, 10)]
+        }
+        self.death_frames = {
+            "right": [f"zombiefour_die_right_{i}" for i in range(1, 6)],
+            "left": [f"zombiefour_die_left_{i}" for i in range(1, 6)]
+        }
+
+        self.actor.image = self.run_frames[self.direction][0]
+        self.vx = 3
+        self.actor.bottom = y + 35
 
 
 pgzrun.go()
@@ -536,6 +547,5 @@ pgzrun.go()
 
 # COISAS A FAZER DEPOIS DO JOGO PRONTO
 
-# CORRIGIR ANIMACOES PARA ESQUERDA
 # AJUSTAR BOTOES DO MENU
 # CORRIGIR ORGANIZACAO DAS PASTAS E DO CODIGO
