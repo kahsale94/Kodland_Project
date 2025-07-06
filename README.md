@@ -32,7 +32,13 @@ Este projeto foi desenvolvido como parte de um processo seletivo, com o objetivo
 ## ▶️ Como Rodar o Jogo
 
 1. Certifique-se de ter o Python 3 instalado.
-2. Instale as dependências com o comando:
+2. Instale o pgzero com o comando:
 
 ```bash
-pip install -r requirements.txt
+pip install pgzero
+```
+3.Depois para rodar, use o comando:
+
+```bash
+pgzrun main.py
+```
